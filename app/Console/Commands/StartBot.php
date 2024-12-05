@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Telegram;
+use App\Services\TelegramService;
 use Illuminate\Console\Command;
 
 class StartBot extends Command
@@ -28,7 +29,7 @@ class StartBot extends Command
     {
         $this->info('Telegram Bot is Running in the background.');
         while (true) {
-            Telegram::replyMessage();
+            TelegramService::replyMessage();
             sleep(1);
         }
     }

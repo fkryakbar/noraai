@@ -1,8 +1,14 @@
 <?php
 
-use App\Services\Telegram;
+use App\Services\TelegramService;
 use Illuminate\Support\Facades\Route;
+use Telegram\Bot\Laravel\Facades\Telegram;
 
-Route::get('/', function () {
-    Telegram::replyMessage();
+
+Route::get('/webhook', function () {
+    // Telegram::setWebhook(
+    //     ['url' => 'https://siapeka.fkipulm.id']
+    // );
+    // Telegram::deleteWebhook();
+    TelegramService::replyMessage();
 });
