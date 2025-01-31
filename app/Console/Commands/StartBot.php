@@ -30,7 +30,7 @@ class StartBot extends Command
         $this->info('Telegram Bot is Running in the background.');
         while (true) {
             TelegramService::replyMessage();
-            sleep(1);
+            sleep(2);
         }
     }
 }

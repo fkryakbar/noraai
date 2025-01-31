@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\LastUpdateId;
 use App\Models\User;
 use Exception;
+use Illuminate\Support\Facades\Http;
 use Telegram\Bot\Laravel\Facades\Telegram;
 
 class TelegramService
@@ -40,11 +41,10 @@ class TelegramService
     public static function replyMessage()
     {
         $updates = collect(Telegram::getUpdates(['offset' => self::getLastUpdateId() + 1]));
-        // dd($updates);
+
         if ($updates->isEmpty()) return;
 
         $updates->each(function ($update) {
-            // dd(collect($update['message']['photo'])->last());
             $chatId = $update['message']['from']['id'];
             $message = isset($update['message']['text']) ? $update['message']['text'] : null;
             $photo = isset($update['message']['photo']) ? collect($update['message']['photo'])->last() : null;
@@ -57,10 +57,10 @@ class TelegramService
                 return;
             }
             if ($message) {
-                self::handleUserMessage($chatId, $message, $user, $update);
+                self::handleUserMessageGemini($chatId, $message, $user, $update);
             }
             if ($photo) {
-                self::handleUserPhoto($chatId, $photo, $user, $update, $caption);
+                self::handleUserPhotoGemini($chatId, $photo, $user, $update, $caption);
             }
         });
 
@@ -74,27 +74,24 @@ class TelegramService
             ['name' => $from['first_name']]
         );
     }
+
     private static function convertFileToBase64($url)
     {
-        // Get the file content from the URL
         $fileContent = file_get_contents($url);
 
-        // Check if the file was fetched successfully
         if ($fileContent === false) {
             throw new Exception("Failed to fetch the file from the URL: $url");
         }
 
-        // Encode the content to Base64
         return base64_encode($fileContent);
     }
 
-    private static function handleUserPhoto($chatId, $photo, $user, $update, $caption)
+    // Fungsi baru untuk menggunakan Gemini API untuk menangani foto
+    private static function handleUserPhotoGemini($chatId, $photo, $user, $update, $caption)
     {
         $file = Telegram::getFile(['file_id' => $photo['file_id']]);
         $linkPhoto = 'https://api.telegram.org/file/bot' . env('TELEGRAM_BOT_TOKEN') . '/' . $file['file_path'];
 
-
-        // $role = $update['message']['reply_to_message']['from']['is_bot'] ? 'system' : 'user';
         $role = 'user';
         $content = [
             [
@@ -111,11 +108,12 @@ class TelegramService
 
         $prompt[] = compact('role', 'content');
 
-        $response = OpenAi::completions($prompt, $chatId, $user);
+        $response = self::requestGemini($prompt); // Menggunakan Gemini API
         self::sendMessage($chatId, self::parse($response), 'HTML');
     }
 
-    private static function handleUserMessage($chatId, $message, $user, $update)
+    // Fungsi baru untuk menggunakan Gemini API untuk menangani pesan teks
+    private static function handleUserMessageGemini($chatId, $message, $user, $update)
     {
         if ($message === '/usage') {
             self::sendMessage($chatId, "Name: {$user->name}");
@@ -129,12 +127,13 @@ class TelegramService
             return;
         }
 
-        $prompt = self::buildPrompt($message, $update);
-        $response = OpenAi::completions($prompt, $chatId, $user);
+        $prompt = self::buildPromptGemini($message, $update); // Gunakan Gemini prompt
+        $response = self::requestGemini($prompt); // Menggunakan Gemini API
         self::sendMessage($chatId, self::parse($response), 'HTML');
     }
 
-    private static function buildPrompt($message, $update)
+    // Fungsi untuk membangun prompt Gemini
+    private static function buildPromptGemini($message, $update)
     {
         $prompt = [];
 
@@ -146,6 +145,31 @@ class TelegramService
 
         $prompt[] = ['role' => 'user', 'content' => $message];
         return $prompt;
+    }
+
+    // Fungsi untuk melakukan request ke Gemini API
+    private static function requestGemini($prompt)
+    {
+        $apiKey = env('GEMINI_API_KEY');
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={$apiKey}";
+
+        $response = Http::post($url, [
+            'contents' => [
+                [
+                    'parts' => [
+                        [
+                            'text' => $prompt
+                        ]
+                    ]
+                ]
+            ]
+        ]);
+
+        if ($response->failed()) {
+            throw new Exception("Failed to connect to Gemini API: " . $response->body());
+        }
+
+        return $response->json();
     }
 
     public static function parse($markdown)
